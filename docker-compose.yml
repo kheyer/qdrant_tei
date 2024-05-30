@@ -1,0 +1,60 @@
+version: '3.8'
+
+networks:
+  qdrant_tei_network:
+    name: qdrant_tei_network
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.9.1
+    env_file: .env
+    networks:
+      - qdrant_tei_network
+    ports:
+      - ${QDRANT__SERVICE__HTTP_PORT}:${QDRANT__SERVICE__HTTP_PORT}
+      - ${QDRANT__SERVICE__GRPC_PORT}:${QDRANT__SERVICE__GRPC_PORT}
+    volumes:
+      - ${QDRANT_STORAGE_DIR}:/qdrant/storage
+
+  tei-0:
+    image: ghcr.io/huggingface/text-embeddings-inference:1.2
+    env_file: .env
+    networks:
+      - qdrant_tei_network
+    volumes:
+      - "${HUGGINGFACE_HUB_CACHE}:/data"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  # tei-1:
+  #   image: ghcr.io/huggingface/text-embeddings-inference:1.2
+  #   env_file: .env
+  #   networks:
+  #     - qdrant_tei_network
+  #   volumes:
+  #     - "${HUGGINGFACE_HUB_CACHE}:/data"
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             device_ids: ['1']
+  #             capabilities: [gpu]
+
+  nginx:
+    image: nginx
+    env_file: .env
+    networks:
+      - qdrant_tei_network
+    ports:
+      - "${NGINX_PORT}:80"
+    volumes:
+      - "./nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+    depends_on:
+      - tei-0
+      - tei-1
